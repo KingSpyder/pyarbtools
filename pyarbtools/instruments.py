@@ -832,6 +832,7 @@ class M8195A(SignalGeneratorBase):
         refSrc (str): Reference clock source. ('axi', 'int', 'ext')
         refFreq (float): Reference clock frequency.
         amp1/2/3/4 (float): Output amplitude in volts pk-pk. (min=75 mV, max=1 V)
+        mem_mode1/2/3/4 (float): Memory mode ('ext' or 'int')
         func (str): AWG mode, either arb or sequencing. ('arb', 'sts', 'stsc')
 
     TODO
@@ -858,10 +859,17 @@ class M8195A(SignalGeneratorBase):
         self.amp2 = float(self.query("voltage2?"))
         self.amp3 = float(self.query("voltage3?"))
         self.amp4 = float(self.query("voltage4?"))
+        self.mem_mode1 = self.query("trac1:mmod?").strip()
+        self.mem_mode2 = self.query("trac2:mmod?").strip()
+        self.mem_mode3 = self.query("trac3:mmod?").strip()
+        self.mem_mode4 = self.query("trac4:mmod?").strip()
 
         # Initialize waveform format constants and populate them with check_resolution()
-        self.gran = 256
-        self.minLen = 1280
+        # self.gran = 256
+        # self.minLen = 1280
+        #Internal mode is less restrictive? Below are guessed values
+        self.gran = 128
+        self.minLen = 128
         self.binMult = 127
         self.binShift = 0
 
@@ -876,6 +884,7 @@ class M8195A(SignalGeneratorBase):
             refSrc (str): Reference clock source. ('axi', 'int', 'ext')
             refFreq (float): Reference clock frequency.
             amp1/2/3/4 (float): Output amplitude in volts pk-pk. (min=75 mV, max=1 V)
+            mem_mode1/2/3/4 (float): Memory mode ('ext' or 'int')
             func (str): AWG mode, either arb or sequencing. ('arb', 'sts', 'stsc')
         """
 
@@ -903,6 +912,14 @@ class M8195A(SignalGeneratorBase):
                 self.set_amplitude(value, channel=3)
             elif key == "amp4":
                 self.set_amplitude(value, channel=4)
+            elif key == "mem_mode1":
+                self.set_mem_mode(value, channel=1)
+            elif key == "mem_mode2":
+                self.set_mem_mode(value, channel=2)
+            elif key == "mem_mode3":
+                self.set_mem_mode(value, channel=3)
+            elif key == "mem_mode4":
+                self.set_mem_mode(value, channel=4)
             elif key == "func":
                 self.set_func(value)
             else:
@@ -959,6 +976,19 @@ class M8195A(SignalGeneratorBase):
             raise ValueError("'func' argument must be 'arb', 'sts', 'stsc'")
         self.write(f"func:mode {func}")
         self.func = self.query("func:mode?").strip()
+
+    def set_mem_mode(self, mode="ext", channel=1):
+        """
+        Sets and reads memory mode using SCPI commands.
+        Args:
+            mode (str): Memory mode. ('int', 'ext')
+        """
+        if channel not in [1, 2, 3, 4]:
+            raise error.InstrumentError("'channel' must be 1, 2, 3, or 4.")
+        if mode.lower() not in ["int", "ext"]:
+            raise ValueError("'mode' must be 'int', or 'ext'")
+        self.write(f"trac{channel}:mmod {mode}")
+        exec(f"self.mem_mode{channel} = self.query('trac{channel}:mmod?').strip()")
 
     def set_refSrc(self, refSrc="axi"):
         """
@@ -1070,7 +1100,7 @@ class M8195A(SignalGeneratorBase):
         if rl % self.gran != 0:
             raise error.GranularityError(f"Waveform must have a granularity of {self.gran}.")
 
-        # Apply the binary multiplier, cast to int16, and shift samples over if required
+        # Apply the binary multiplier, cast to int8, and shift samples over if required
         return np.array(self.binMult * wfm, dtype=np.int8) << self.binShift
 
     def delete_segment(self, wfmID=1, ch=1):
