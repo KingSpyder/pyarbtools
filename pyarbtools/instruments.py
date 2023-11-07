@@ -863,6 +863,10 @@ class M8195A(SignalGeneratorBase):
         self.mem_mode2 = self.query("trac2:mmod?").strip()
         self.mem_mode3 = self.query("trac3:mmod?").strip()
         self.mem_mode4 = self.query("trac4:mmod?").strip()
+        self.fir_scale1 = self.query("outp1:filt:frat:scal?").strip()
+        self.fir_scale2 = self.query("outp2:filt:frat:scal?").strip()
+        self.fir_scale3 = self.query("outp3:filt:frat:scal?").strip()
+        self.fir_scale4 = self.query("outp4:filt:frat:scal?").strip()
 
         # Initialize waveform format constants and populate them with check_resolution()
         # self.gran = 256
@@ -872,6 +876,9 @@ class M8195A(SignalGeneratorBase):
         self.minLen = 128
         self.binMult = 127
         self.binShift = 0
+
+    def ask_if_done(self):
+        self.query("*opc?")
 
     # def configure(self, dacMode='single', memDiv=1, fs=64e9, refSrc='axi', refFreq=100e6, amp1=300e-3, amp2=300e-3, amp3=300e-3, amp4=300e-3, func='arb'):
     def configure(self, **kwargs):
@@ -885,6 +892,7 @@ class M8195A(SignalGeneratorBase):
             refFreq (float): Reference clock frequency.
             amp1/2/3/4 (float): Output amplitude in volts pk-pk. (min=75 mV, max=1 V)
             mem_mode1/2/3/4 (float): Memory mode ('ext' or 'int')
+            fir_scale1/2/3/4 (float): scale of FIR filter
             func (str): AWG mode, either arb or sequencing. ('arb', 'sts', 'stsc')
         """
 
@@ -920,6 +928,14 @@ class M8195A(SignalGeneratorBase):
                 self.set_mem_mode(value, channel=3)
             elif key == "mem_mode4":
                 self.set_mem_mode(value, channel=4)
+            elif key == "fir_scale1":
+                self.set_fir_scale(value, channel=1)
+            elif key == "fir_scale2":
+                self.set_fir_scale(value, channel=2)
+            elif key == "fir_scale3":
+                self.set_fir_scale(value, channel=3)
+            elif key == "fir_scale4":
+                self.set_fir_scale(value, channel=4)
             elif key == "func":
                 self.set_func(value)
             else:
@@ -989,6 +1005,29 @@ class M8195A(SignalGeneratorBase):
             raise ValueError("'mode' must be 'int', or 'ext'")
         self.write(f"trac{channel}:mmod {mode}")
         exec(f"self.mem_mode{channel} = self.query('trac{channel}:mmod?').strip()")
+    
+    def set_fir_scale(self, value=1, channel=1):
+        """
+        Sets and reads fir scale using SCPI commands.
+        Args:
+            value (float): FIR Scale (0<=value<=1).
+        """
+        if channel not in [1, 2, 3, 4]:
+            raise error.InstrumentError("'channel' must be 1, 2, 3, or 4.")
+        if not isinstance(value, (int, float)) or value < 0 or value > 1:
+            raise ValueError("FIR Scale must be a float between 0 and 1.")
+        if self.memDiv==1:
+            rate_name = "frat"
+        elif self.memDiv==2:
+            rate_name = "hrat"
+        elif self.memDiv==4:
+            rate_name = "qrat"
+        else:
+            raise ValueError("self.memDiv is not at a correct value."
+                             f"It is {self.memDiv} and should be 1, 2 or 4.")
+        self.write(f"outp{channel}:filt:{rate_name}:scal {value}")
+        exec(f"self.fir_scale{channel} ="
+                f" float(self.query(f'outp{channel}:filt:{rate_name}:scal?').strip())")
 
     def set_refSrc(self, refSrc="axi"):
         """
@@ -1137,6 +1176,12 @@ class M8195A(SignalGeneratorBase):
         self.write(f"output{ch} on")
         self.write("init:cont on")
         self.write("init:imm")
+
+    def fire_trigger(self):
+        self.write("init:imm")
+    
+    def enable_output(self, channel=1):
+        self.write(f"output{channel} on")
 
     def stop(self, ch=1):
         """
