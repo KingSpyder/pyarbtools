@@ -855,6 +855,7 @@ class M8195A(SignalGeneratorBase):
         self.func = self.query("func:mode?").strip()
         self.refSrc = self.query("roscillator:source?").strip()
         self.refFreq = float(self.query("roscillator:frequency?").strip())
+        self.out_refSrc = self.query("outp:rosc:source?").strip()
         self.amp1 = float(self.query("voltage1?"))
         self.amp2 = float(self.query("voltage2?"))
         self.amp3 = float(self.query("voltage3?"))
@@ -890,6 +891,7 @@ class M8195A(SignalGeneratorBase):
             fs (float): AWG sample rate.
             refSrc (str): Reference clock source. ('axi', 'int', 'ext')
             refFreq (float): Reference clock frequency.
+            out_refSrc (str) : Output ref clock source ('int', 'ext', 'sclk1', 'sclk2')
             amp1/2/3/4 (float): Output amplitude in volts pk-pk. (min=75 mV, max=1 V)
             mem_mode1/2/3/4 (float): Memory mode ('ext' or 'int')
             fir_scale1/2/3/4 (float): scale of FIR filter
@@ -912,6 +914,8 @@ class M8195A(SignalGeneratorBase):
                 self.set_refSrc(value)
             elif key == "refFreq":
                 self.set_refFreq(value)
+            elif key == "out_refSrc":
+                self.set_ouput_ref_source(value)
             elif key == "amp1":
                 self.set_amplitude(value, channel=1)
             elif key == "amp2":
@@ -942,6 +946,19 @@ class M8195A(SignalGeneratorBase):
                 raise KeyError(f'Invalid keyword argument: "{key}"')  # raise KeyError('Invalid keyword argument. Use "dacMode", "memDiv", "fs", "refSrc", "refFreq", "amp1/2/3/4", or "func".')
 
         self.err_check()
+
+    def set_ouput_ref_source(self, ref_source):
+        """
+        Sets and reads outût reference source using SCPI commands.
+        Args:
+            refSrc (str): Reference clock source. ('int', 'ext', 'sclk1', 'sclk2')
+        """
+
+        if ref_source.lower() not in ['int', 'ext', 'sclk1', 'sclk2']:
+            raise ValueError("'refSrc' must be 'int', 'ext', 'sclk1', 'sclk2'")
+        self.write(f"outp:rosc:source {ref_source}")
+        self.out_refSrc = self.query("outp:rosc:source?").strip()
+        
 
     def set_dacMode(self, dacMode="single"):
         """
